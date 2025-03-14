@@ -1,4 +1,10 @@
 import streamlit as st
+import numpy as np
+import pandas as pd
+
+df = pd.read_csv('vgsales.csv', index_col=0)
+st.session_state['filtered_df'] = df.copy()
+filter_dict = {x: "" for x in df.columns}
 
 
 def analiza_joc(nume, descriere):
@@ -6,11 +12,24 @@ def analiza_joc(nume, descriere):
     st.markdown(descriere)
 
 
-def script_sidebar(pagina_selectata, df):
+def script_sidebar(pagina_selectata):
     if pagina_selectata == "Acasa":
-        st.header("🏠 Acasă")
+        st.header("🏠 Acasa")
         st.subheader("Dataframe-ul")
-        st.dataframe(df, height=500)
+        col1, col2 = st.columns([1, 2])  # Adjust the ratio for better layout
+
+        with col1:
+            for column in st.session_state['filtered_df'].columns:
+                if pd.api.types.is_numeric_dtype(df[column].dtype):
+                    st.text_input(label=column, max_chars=20, key=column, on_change=filtrare, args=[column])
+                    st.selectbox(label=column, key=column + ' box', options=['Equal', 'Bigger', 'Smaller'],
+                                 label_visibility='collapsed',on_change=filtrare(column))
+                else:
+                    st.text_input(label=column, max_chars=20, key=column, args=[column],on_change=filtrare)
+            st.button(label="Resetare campuri", on_click=resetare)
+        with col2:
+            st.dataframe(st.session_state['filtered_df'], height=1400)
+
     if pagina_selectata == "Detalii Variabile":
         st.header("Detalii Variabile")
         date_joc = {
@@ -28,3 +47,75 @@ def script_sidebar(pagina_selectata, df):
         }
         for nume, descriere in date_joc.items():
             analiza_joc(nume, descriere)
+    if pagina_selectata == "Date lipsa":
+        st.header("Date lipsa")
+        coloana_selectata = st.selectbox("Alege o coloana", st.session_state['filtered_df'].columns)
+        mesaj, numar_valori_lipsa = contoriazare_valori_lipsa(coloana_selectata)
+        st.text(mesaj)
+
+        if numar_valori_lipsa > 0 and pd.api.types.is_numeric_dtype(st.session_state['filtered_df'][coloana_selectata]):
+            st.subheader("Alege o metoda de adaugare a valorilor lipsa")
+            st.button("Metoda mediei", on_click=onClick, args=("mediei", coloana_selectata))
+            st.button("Metoda modului", on_click=onClick, args=("modului", coloana_selectata))
+            st.button("Metoda medianei", on_click=onClick, args=("medianei", coloana_selectata))
+
+
+def filtrare(column):
+    filter_dict[column] = st.session_state.get(column, "")
+    st.session_state['filtered_df'] = filter_dataframe()
+
+
+def filter_dataframe():
+    filtered_copy = df.copy()
+    for column, value in filter_dict.items():
+        if column in df.columns and value != "":
+            if pd.api.types.is_numeric_dtype(filtered_copy[column]):
+                condition = st.session_state.get(column + ' box', 'Equal')
+                if condition == 'Bigger':
+                    filtered_copy = filtered_copy[filtered_copy[column] > float(value)]
+                elif condition == 'Smaller':
+                    filtered_copy = filtered_copy[filtered_copy[column] < float(value)]
+                else:
+                    filtered_copy = filtered_copy[filtered_copy[column] == float(value)]
+            elif pd.api.types.is_string_dtype(filtered_copy[column]):
+                filtered_copy = filtered_copy[
+                    filtered_copy[column].astype(str).str.contains(value, case=False, na=False)]
+
+    return filtered_copy
+
+
+def resetare():
+    for column in st.session_state['filtered_df'].columns:
+        st.session_state[column] = ""
+    for (key, value) in filter_dict.items():
+        filter_dict[key] = ""
+    st.session_state['filtered_df'] = filter_dataframe()
+
+    for column in df.columns:
+        if pd.api.types.is_numeric_dtype(df[column]):
+            st.session_state[column + ' box'] = 'Equal'
+
+
+def contoriazare_valori_lipsa(column_name):
+    return f"Coloana  '{column_name}' contine {st.session_state['filtered_df'][column_name].isnull().sum()} valori lipsa", \
+        st.session_state['filtered_df'][
+            column_name].isnull().sum()
+
+
+def onClick(nume, coloana_selectatat):
+    val = 0
+    if nume == "mediei":
+        val = int(np.nanmean(st.session_state['filtered_df'][coloana_selectatat]))
+    if nume == "modului":
+        val = int(st.session_state['filtered_df'][coloana_selectatat].mode())
+    if nume == "medianei":
+        val = int(st.session_state['filtered_df'][coloana_selectatat].median())
+
+    st.session_state['filtered_df'][coloana_selectatat] = st.session_state['filtered_df'][coloana_selectatat].fillna(
+        val)
+    if st.session_state['filtered_df'][coloana_selectatat].isnull().sum() > 0:
+        st.markdown(f"<span style='color:red;'>Nu s-a actualizat cu succes!</span>", unsafe_allow_html=True)
+    else:
+        st.markdown(
+            f"<span style='color:green;'>Am actualizat cu succes coloana {coloana_selectatat} folosind metoda {nume} -> {val}.</span>",
+            unsafe_allow_html=True)
