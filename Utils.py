@@ -73,8 +73,9 @@ def script_sidebar(pagina_selectata):
         agg_dict = {col: selected_operations[col] for col in selected_operations if selected_operations[col]}
         if agg_dict:
             df_grupat = df.groupby(selected_column).agg(agg_dict)
-            filtru = st.text_input('Search by groupby column', onchange=filtruNume, args=(st.session_state, df_grupat))
-            st.dataframe(df_grupat)
+            filtru = st.text_input('Search by groupby column')
+            df_filtrat = filtruNume(filtru, df_grupat)
+            st.dataframe(df_filtrat)
         else:
             st.write("Please select at least one column and one operation.")
 
