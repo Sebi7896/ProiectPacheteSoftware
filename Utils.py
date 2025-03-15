@@ -59,6 +59,29 @@ def script_sidebar(pagina_selectata):
             st.button("Metoda modului", on_click=onClick, args=("modului", coloana_selectata))
             st.button("Metoda medianei", on_click=onClick, args=("medianei", coloana_selectata))
 
+    if pagina_selectata == "Functii de grup":
+        selected_column = st.selectbox("Coloana pentru grupare", df.columns)
+        numerice = []
+        for column in df.columns:
+            if pd.api.types.is_numeric_dtype(df[column]):
+                numerice += [column]
+        selected_columns = st.multiselect("Coloana rezultate", numerice)
+        operations = ['sum', 'mean', 'min', 'max', 'median', 'count', 'std', 'var']
+        selected_operations = {}
+        for col in selected_columns:
+            selected_operations[col] = st.multiselect(f"Select operations for {col}", operations, key=col)
+        agg_dict = {col: selected_operations[col] for col in selected_operations if selected_operations[col]}
+        if agg_dict:
+            df_grupat = df.groupby(selected_column).agg(agg_dict)
+            filtru = st.text_input('Search by groupby column', onchange=filtruNume, args=(st.session_state, df_grupat))
+            st.dataframe(df_grupat)
+        else:
+            st.write("Please select at least one column and one operation.")
+
+def filtruNume(filtru, df):
+    if filtru:  # Check if filter is not empty
+        return df[df.index.astype(str).str.contains(filtru, case=False, na=False)]
+    return df
 
 def filtrare(column):
     filter_dict[column] = st.session_state.get(column, "")
