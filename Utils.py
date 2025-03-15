@@ -24,9 +24,9 @@ def script_sidebar(pagina_selectata):
                 if pd.api.types.is_numeric_dtype(df[column].dtype):
                     st.text_input(label=column, max_chars=20, key=column, on_change=filtrare, args=[column])
                     st.selectbox(label=column, key=column + ' box', options=['Equal', 'Bigger', 'Smaller'],
-                                 label_visibility='collapsed',on_change=filtrare(column))
+                                 label_visibility='collapsed', on_change=filtrare(column))
                 else:
-                    st.text_input(label=column, max_chars=20, key=column, args=[column],on_change=filtrare)
+                    st.text_input(label=column, max_chars=20, key=column, args=[column], on_change=filtrare)
             st.button(label="Resetare campuri", on_click=resetare)
         with col2:
             st.dataframe(st.session_state['filtered_df'], height=1400)
@@ -81,15 +81,19 @@ def script_sidebar(pagina_selectata):
             st.write("Please select at least one column and one operation.")
     if pagina_selectata == "Grafice":
         st.header("Selecteaza tipul de grafic dorit")
-        grafice = ['Pie']
+        grafice = ['Pie', 'Histogram']
         grafic_selectat = st.selectbox("Grafice", grafice)
         if grafic_selectat == "Pie":
             pieChartUI()
+        elif grafic_selectat == "Histogram":
+            histogram()
+
 
 def filtruNume(filtru, df):
     if filtru:  # Check if filter is not empty
         return df[df.index.astype(str).str.contains(filtru, case=False, na=False)]
     return df
+
 
 def filtrare(column):
     filter_dict[column] = st.session_state.get(column, "")
@@ -151,15 +155,46 @@ def onClick(nume, coloana_selectatat):
             f"<span style='color:green;'>Am actualizat cu succes coloana {coloana_selectatat} folosind metoda {nume} -> {val}.</span>",
             unsafe_allow_html=True)
 
+
 def pieChartUI():
-    chart_columns = ['Name', 'Platform', 'Year', 'Genre', 'Publisher']
+    chart_columns = ['Platform', 'Year', 'Genre', 'Publisher']
     result_columns = ['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']
     column1 = st.selectbox('Coloana 1', chart_columns)
     column2 = st.selectbox('Coloana 2', result_columns)
-    df_grupat = df.groupby(column1)[column2].sum()
-    procente = (df_grupat / df_grupat.sum()) * 100
+
+    df_grupat = df.groupby(column1)[column2].sum().sort_values(ascending=False)
+
+    top_10 = df_grupat.head(10)
+    restul = df_grupat.iloc[10:].sum()
+
+    if restul > 0:
+        top_10["Others"] = restul
+
     fig, ax = plt.subplots()
-    ax.pie(df_grupat, labels=df_grupat.index, autopct='%1.1f%%', startangle=90, colors=plt.cm.Paired.colors)
+    ax.pie(top_10, labels=top_10.index, startangle=90, autopct='%1.1f%%')
     ax.set_title(f'Distribuția {column2} per {column1}')
 
     st.pyplot(fig)
+
+
+def histogram():
+    selected_column = st.selectbox("Alege o coloana dupa care sa ai distributia",
+                                   ['Platform', 'Year', 'Genre', 'Publisher'])
+
+    if pd.api.types.is_numeric_dtype(df[selected_column]):
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.hist(df[selected_column].dropna(), bins=20, color='skyblue', edgecolor='black')  # Drop NaNs
+        ax.set_title(f'Distribuția {selected_column} pe frecvențe')
+        ax.set_xlabel(selected_column)
+        ax.set_ylabel("Frecvența")
+        st.pyplot(fig)
+
+    else:
+        value_counts = df[selected_column].dropna().value_counts().sort_values(ascending=False)[:20]
+        fig, ax = plt.subplots(figsize=(14, 6))
+        ax.bar(value_counts.index, value_counts.values, color='cornflowerblue')
+        ax.set_title(f'Distribuția {selected_column} pe frecvențe')
+        ax.set_xlabel(selected_column)
+        ax.set_ylabel("Număr de apariții")
+        ax.set_xticklabels(value_counts.index, rotation=45, ha='right')
+        st.pyplot(fig)
