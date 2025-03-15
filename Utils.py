@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 df = pd.read_csv('vgsales.csv', index_col=0)
 st.session_state['filtered_df'] = df.copy()
@@ -78,6 +79,12 @@ def script_sidebar(pagina_selectata):
             st.dataframe(df_filtrat)
         else:
             st.write("Please select at least one column and one operation.")
+    if pagina_selectata == "Grafice":
+        st.header("Selecteaza tipul de grafic dorit")
+        grafice = ['Pie']
+        grafic_selectat = st.selectbox("Grafice", grafice)
+        if grafic_selectat == "Pie":
+            pieChartUI()
 
 def filtruNume(filtru, df):
     if filtru:  # Check if filter is not empty
@@ -143,3 +150,16 @@ def onClick(nume, coloana_selectatat):
         st.markdown(
             f"<span style='color:green;'>Am actualizat cu succes coloana {coloana_selectatat} folosind metoda {nume} -> {val}.</span>",
             unsafe_allow_html=True)
+
+def pieChartUI():
+    chart_columns = ['Name', 'Platform', 'Year', 'Genre', 'Publisher']
+    result_columns = ['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']
+    column1 = st.selectbox('Coloana 1', chart_columns)
+    column2 = st.selectbox('Coloana 2', result_columns)
+    df_grupat = df.groupby(column1)[column2].sum()
+    procente = (df_grupat / df_grupat.sum()) * 100
+    fig, ax = plt.subplots()
+    ax.pie(df_grupat, labels=df_grupat.index, autopct='%1.1f%%', startangle=90, colors=plt.cm.Paired.colors)
+    ax.set_title(f'Distribuția {column2} per {column1}')
+
+    st.pyplot(fig)
