@@ -2,11 +2,13 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 
 df = pd.read_csv('vgsales.csv', index_col=0)
-st.session_state['filtered_df'] = df.copy()
+if 'filtered_df' not in st.session_state:
+    st.session_state['filtered_df'] = df.copy(False)
 filter_dict = {x: "" for x in df.columns}
-
 
 def analiza_joc(nume, descriere):
     st.subheader(nume)
@@ -17,7 +19,7 @@ def script_sidebar(pagina_selectata):
     if pagina_selectata == "Acasa":
         st.header("🏠 Acasa")
         st.subheader("Dataframe-ul")
-        col1, col2 = st.columns([1, 2])  # Adjust the ratio for better layout
+        col1, col2 = st.columns([1, 2])
 
         with col1:
             for column in st.session_state['filtered_df'].columns:
@@ -33,6 +35,7 @@ def script_sidebar(pagina_selectata):
 
     if pagina_selectata == "Detalii Variabile":
         st.header("Detalii Variabile")
+        st.dataframe(st.session_state['filtered_df'].describe())
         date_joc = {
             "🏆 Rank-ul": "Acesta reprezintă poziția jocului în clasamentul global al vânzărilor.",
             "🎮 Name": "Denumirea oficială a jocului.",
@@ -87,7 +90,34 @@ def script_sidebar(pagina_selectata):
             pieChartUI()
         elif grafic_selectat == "Histogram":
             histogram()
+    if pagina_selectata == "Valori aberante":
+        st.header("Valori aberante")
+        numerice = [col for col in st.session_state['filtered_df'].columns
+                    if pd.api.types.is_numeric_dtype(st.session_state['filtered_df'][col])]
+        choosedColumn = st.selectbox(label="Selecteaza o coloana numerica", options=numerice, key=numerice)
 
+        draw_boxplot(choosedColumn,st.session_state['filtered_df'])
+
+    if pagina_selectata == "Scalarea datelor":
+        st.header("Scalarea datelor")
+        alegere = st.selectbox("Selecteaza metoda de scalare", ['Standardizare','Normalizare'])
+        coloane_numerice = [col for col in st.session_state['filtered_df'].columns
+                            if pd.api.types.is_numeric_dtype(st.session_state['filtered_df'][col]) and col != 'Year']
+
+        if st.button("Aplica"):
+            standardizare(coloane_numerice) if alegere == 'Standardizare' else normalizare(coloane_numerice)
+
+        st.button("Resetare",on_click=resetare)
+
+
+def standardizare(coloane_numerice):
+    scaler = StandardScaler()
+    st.session_state['filtered_df'][coloane_numerice] = pd.DataFrame(scaler.fit_transform(st.session_state['filtered_df'][coloane_numerice]))
+    st.text('Standardizare cu succes!')
+def normalizare(coloane_numerice):
+    min_max_scaler = MinMaxScaler()
+    st.session_state['filtered_df'][coloane_numerice] = pd.DataFrame(min_max_scaler.fit_transform(st.session_state['filtered_df'][coloane_numerice]))
+    st.text('Normalizare cu succes!')
 
 def filtruNume(filtru, df):
     if filtru:  # Check if filter is not empty
@@ -101,7 +131,7 @@ def filtrare(column):
 
 
 def filter_dataframe():
-    filtered_copy = df.copy()
+    filtered_copy = st.session_state['filtered_df']
     for column, value in filter_dict.items():
         if column in df.columns and value != "":
             if pd.api.types.is_numeric_dtype(filtered_copy[column]):
@@ -120,15 +150,7 @@ def filter_dataframe():
 
 
 def resetare():
-    for column in st.session_state['filtered_df'].columns:
-        st.session_state[column] = ""
-    for (key, value) in filter_dict.items():
-        filter_dict[key] = ""
-    st.session_state['filtered_df'] = filter_dataframe()
-
-    for column in df.columns:
-        if pd.api.types.is_numeric_dtype(df[column]):
-            st.session_state[column + ' box'] = 'Equal'
+    st.session_state['filtered_df'] = df.copy()
 
 
 def contoriazare_valori_lipsa(column_name):
@@ -198,3 +220,21 @@ def histogram():
         ax.set_ylabel("Număr de apariții")
         ax.set_xticklabels(value_counts.index, rotation=45, ha='right')
         st.pyplot(fig)
+
+
+def draw_boxplot(column_name: str, df1: pd.DataFrame):
+    min_val, max_val = int(df1[column_name].min()), int(df1[column_name].max())
+    selected_range = st.slider("Select Sales Range", min_value=min_val, max_value=max_val, value=(min_val, max_val))
+    filtered = df1[(df1[column_name] >= selected_range[0]) & (df1[column_name] <= selected_range[1] + 1)]
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.boxplot(filtered[column_name].dropna(), vert=True, patch_artist=True)
+    ax.set_title(f'Boxplot of {column_name}')
+    ax.set_xlabel(column_name)
+    ax.set_ylabel('Values')
+    ax.grid(True)
+    st.pyplot(fig)
+
+    if st.button('Aplica schimbarile'):
+        st.success(f"Filtrul a fost aplicat! {len(df)} rânduri selectate.")
+        st.session_state['filtered_df'] = filtered
