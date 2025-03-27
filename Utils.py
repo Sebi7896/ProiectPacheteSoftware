@@ -110,40 +110,8 @@ def script_sidebar(pagina_selectata):
 
         st.button("Resetare",on_click=resetare)
     if pagina_selectata == "GeoPandas":
-        # Load the data for Steam users (Country, Value in millions)
-        i_steam_df = pd.read_csv("./dateGeo.csv")
+        draw_map()
 
-        # Load the Europe map (GeoJSON)
-        europe = gpd.read_file("europe.json", encoding='latin-1')
-
-        # Calculate area of each country in km² (if needed for visualization)
-        europe["area_km2"] = europe.geometry.area / 1_000_000
-
-        # Ensure that the coordinate reference system (CRS) is in EPSG 4326
-        neighbours = europe.to_crs(epsg=4326)
-
-        # Merge the user data with the map (based on the country column)
-        # Assuming `i_steam_df` has columns 'Country' and 'Value', and the 'Country' column
-        # in the GeoDataFrame (europe) matches country names in the `i_steam_df`.
-
-        # Merge steam data with the Europe GeoDataFrame
-        europe = europe.merge(i_steam_df, left_on="name", right_on="Country", how="left")
-
-        # If some countries don't have a value, you can fill NaN with 0 (or any placeholder value)
-        europe["Value"] = europe["Value"].fillna(0)
-
-        # Generate the map with user data, using the `Value` column to color the countries
-        m = europe.explore("Value", legend=True, color_kwds={"colors": "YlOrRd"})
-
-        # Save the map to an HTML file
-        m.save("map.html")
-
-        # Display the map in Streamlit
-        st.header("Numar utilizatori Steam pe tara")
-        st.components.v1.html(open("map.html", "r").read(), height=600, scrolling=True)
-
-        # Display the merged data (map with Steam users)
-        st.dataframe(europe)
 
 def standardizare(coloane_numerice):
     scaler = StandardScaler()
@@ -273,3 +241,37 @@ def draw_boxplot(column_name: str, df1: pd.DataFrame):
     if st.button('Aplica schimbarile'):
         st.success(f"Filtrul a fost aplicat! {len(df)} rânduri selectate.")
         st.session_state['filtered_df'] = filtered
+
+
+def draw_map():
+    # Load the data for Steam users (Country, Value in millions)
+    i_steam_df = pd.read_csv("./dateGeo.csv")
+
+    # Load the Europe map (GeoJSON)
+    europe = gpd.read_file("europe.json", encoding='latin-1')
+
+    # Calculate area of each country in km² (if needed for visualization)
+    europe["area_km2"] = europe.geometry.area / 1_000_000
+
+    # Ensure that the coordinate reference system (CRS) is in EPSG 4326
+    europe.to_crs(epsg=4326)
+    europe = europe.merge(i_steam_df, left_on="name", right_on="Country", how="left")
+
+    europe["Value"] = europe["Value"].fillna(0)
+    # Generate the map with user data, using the `Value` column to color the countries
+    europe = europe.rename(columns={"Value": "Values (millions)"})
+
+    m = europe.explore(
+        column="Values (millions)",
+        legend=True,
+        tooltip=["Values (millions)"],
+        popup=["Values (millions)"],
+        color_kwds={"cmap": "YlOrRd"}
+    )
+
+    # Save the map to an HTML file
+    m.save("map.html")
+
+    # Display the map in Streamlit
+    st.header("Numar utilizatori Steam pe tara")
+    st.components.v1.html(open("map.html", "r").read(), height=600, scrolling=True)
