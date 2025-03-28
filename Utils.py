@@ -6,12 +6,13 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler
 import geopandas as gpd
 
-df_ratinguri = pd.read_csv("./GameReviews.csv")
-
 df = pd.read_csv('vgsales.csv', index_col=0)
 if 'filtered_df' not in st.session_state:
     st.session_state['filtered_df'] = df.copy(False)
+if 'ratings' not in st.session_state:
+    st.session_state['ratings'] = pd.read_csv('GameReviews.csv', index_col=0)
 filter_dict = {x: "" for x in df.columns}
+
 
 def analiza_joc(nume, descriere):
     st.subheader(nume)
@@ -26,7 +27,7 @@ def script_sidebar(pagina_selectata):
 
         with col1:
             for column in st.session_state['filtered_df'].columns:
-                if pd.api.types.is_numeric_dtype(df[column].dtype):
+                if pd.api.types.is_numeric_dtype(st.session_state['filtered_df'][column].dtype):
                     st.text_input(label=column, max_chars=20, key=column, on_change=filtrare, args=[column])
                     st.selectbox(label=column, key=column + ' box', options=['Equal', 'Bigger', 'Smaller'],
                                  label_visibility='collapsed', on_change=filtrare(column))
@@ -67,10 +68,10 @@ def script_sidebar(pagina_selectata):
             st.button("Metoda medianei", on_click=onClick, args=("medianei", coloana_selectata))
 
     if pagina_selectata == "Functii de grup":
-        selected_column = st.selectbox("Coloana pentru grupare", df.columns)
+        selected_column = st.selectbox("Coloana pentru grupare", st.session_state['filtered_df'].columns)
         numerice = []
-        for column in df.columns:
-            if pd.api.types.is_numeric_dtype(df[column]):
+        for column in st.session_state['filtered_df'].columns:
+            if pd.api.types.is_numeric_dtype(st.session_state['filtered_df'][column]):
                 numerice += [column]
         selected_columns = st.multiselect("Coloana rezultate", numerice)
         operations = ['sum', 'mean', 'min', 'max', 'median', 'count', 'std', 'var']
@@ -79,7 +80,7 @@ def script_sidebar(pagina_selectata):
             selected_operations[col] = st.multiselect(f"Select operations for {col}", operations, key=col)
         agg_dict = {col: selected_operations[col] for col in selected_operations if selected_operations[col]}
         if agg_dict:
-            df_grupat = df.groupby(selected_column).agg(agg_dict)
+            df_grupat = st.session_state['filtered_df'].groupby(selected_column).agg(agg_dict)
             filtru = st.text_input('Search by groupby column')
             df_filtrat = filtruNume(filtru, df_grupat)
             st.dataframe(df_filtrat)
@@ -99,39 +100,47 @@ def script_sidebar(pagina_selectata):
                     if pd.api.types.is_numeric_dtype(st.session_state['filtered_df'][col])]
         choosedColumn = st.selectbox(label="Selecteaza o coloana numerica", options=numerice, key=numerice)
 
-        draw_boxplot(choosedColumn,st.session_state['filtered_df'])
+        draw_boxplot(choosedColumn, st.session_state['filtered_df'])
 
     if pagina_selectata == "Scalarea datelor":
         st.header("Scalarea datelor")
-        alegere = st.selectbox("Selecteaza metoda de scalare", ['Standardizare','Normalizare'])
+        alegere = st.selectbox("Selecteaza metoda de scalare", ['Standardizare', 'Normalizare'])
         coloane_numerice = [col for col in st.session_state['filtered_df'].columns
                             if pd.api.types.is_numeric_dtype(st.session_state['filtered_df'][col]) and col != 'Year']
 
         if st.button("Aplica"):
             standardizare(coloane_numerice) if alegere == 'Standardizare' else normalizare(coloane_numerice)
 
-        st.button("Resetare",on_click=resetare)
+        st.button("Resetare", on_click=resetare)
     if pagina_selectata == "GeoPandas":
         draw_map()
     if pagina_selectata == "Ratinguri":
-        valori = ['Essential', 'Superb', 'Great', 'Good', 'Fair', 'Mediocre', 'Poor', 'Bad', 'Terrible', 'Abysmal']
-
-        st.dataframe(df_ratinguri)
+        valori = ['Abysmalde', 'Terrible', 'Bad', 'Poor', 'Mediocre', 'Fair', 'Good', 'Great', 'Superb', 'Essential']
+        st.dataframe(st.session_state['ratings'])
         if st.button("Codificare date"):
-            df = codificare(valori)
+            st.session_state['ratings'] = codificare(valori, st.session_state['ratings'])
+            st.dataframe(st.session_state['ratings'].describe())
 
-def codificare(valori):
-    df['Review'] = pd.Categorical(df['Review'], categories=valori, ordered=True)
-    return df
+
+def codificare(valori, df_ratinguri):
+    df_ratinguri['Ratings'] = pd.Categorical(df_ratinguri['Review'], categories=valori, ordered=True).codes
+    df_ratinguri['Ratings'] = np.interp(df_ratinguri['Ratings'], [0, len(valori) - 1], [0, 10])
+    return df_ratinguri
+
 
 def standardizare(coloane_numerice):
     scaler = StandardScaler()
-    st.session_state['filtered_df'][coloane_numerice] = pd.DataFrame(scaler.fit_transform(st.session_state['filtered_df'][coloane_numerice]))
+    st.session_state['filtered_df'][coloane_numerice] = pd.DataFrame(
+        scaler.fit_transform(st.session_state['filtered_df'][coloane_numerice]))
     st.text('Standardizare cu succes!')
+
+
 def normalizare(coloane_numerice):
     min_max_scaler = MinMaxScaler()
-    st.session_state['filtered_df'][coloane_numerice] = pd.DataFrame(min_max_scaler.fit_transform(st.session_state['filtered_df'][coloane_numerice]))
+    st.session_state['filtered_df'][coloane_numerice] = pd.DataFrame(
+        min_max_scaler.fit_transform(st.session_state['filtered_df'][coloane_numerice]))
     st.text('Normalizare cu succes!')
+
 
 def filtruNume(filtru, df):
     if filtru:  # Check if filter is not empty
