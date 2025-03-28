@@ -6,6 +6,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler
 import geopandas as gpd
 
+df_ratinguri = pd.read_csv("./GameReviews.csv")
+
 df = pd.read_csv('vgsales.csv', index_col=0)
 if 'filtered_df' not in st.session_state:
     st.session_state['filtered_df'] = df.copy(False)
@@ -111,7 +113,16 @@ def script_sidebar(pagina_selectata):
         st.button("Resetare",on_click=resetare)
     if pagina_selectata == "GeoPandas":
         draw_map()
+    if pagina_selectata == "Ratinguri":
+        valori = ['Essential', 'Superb', 'Great', 'Good', 'Fair', 'Mediocre', 'Poor', 'Bad', 'Terrible', 'Abysmal']
 
+        st.dataframe(df_ratinguri)
+        if st.button("Codificare date"):
+            df = codificare(valori)
+
+def codificare(valori):
+    df['Review'] = pd.Categorical(df['Review'], categories=valori, ordered=True)
+    return df
 
 def standardizare(coloane_numerice):
     scaler = StandardScaler()
