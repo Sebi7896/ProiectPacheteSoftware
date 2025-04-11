@@ -2,8 +2,11 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler
+import seaborn as sns
 import geopandas as gpd
 
 df = pd.read_csv('vgsales.csv', index_col=0)
@@ -120,6 +123,95 @@ def script_sidebar(pagina_selectata):
         if st.button("Codificare date"):
             st.session_state['ratings'] = codificare(valori, st.session_state['ratings'])
             st.dataframe(st.session_state['ratings'].describe())
+
+    if pagina_selectata == "Clusterizare":
+        coloane_de_grupare = [col for col in st.session_state['filtered_df'].columns
+                              if not pd.api.types.is_numeric_dtype(st.session_state['filtered_df'][col])]
+        coloane_de_grupare.append('Year')
+        coloana_aleasa = st.selectbox("Coloane pentru clusterizare",
+                                      coloane_de_grupare)
+        df = st.session_state['filtered_df'].copy()
+        df.drop(columns=[col for col in coloane_de_grupare if col != coloana_aleasa], inplace=True)
+
+        if coloana_aleasa is not 'Name':
+            df_grupat = df.groupby(coloana_aleasa).sum()
+        else:
+            df_grupat = df
+
+        #inainte aplica filtrele pentru missing values, eliminarea de outliers si standardizarea !!
+        st.dataframe(df_grupat)
+        correlation_matrix(df_grupat)
+
+        wcss = []
+        for i in range(1, 11):
+            kmeans = KMeans(n_clusters=i, init='k-means++', random_state=42)
+            kmeans.fit(df_grupat.values)
+            wcss.append(kmeans.inertia_)
+
+        # plot elbow
+        fig1, ax1 = plt.subplots(figsize=(8, 4))
+        sns.lineplot(x=range(1, 11), y=wcss, marker='o', color='red', ax=ax1)
+        ax1.set_title('The Elbow Method')
+        ax1.set_xlabel('Număr de clustere')
+        ax1.set_ylabel('WCSS')
+        st.pyplot(fig1)
+
+        #silhoutte
+        plot_silhouette_scores(df_grupat.values, 2, 11)
+
+        n_clusters = st.slider("Selecteaza numarul de clusteri", min_value=2, max_value=10, value=3)
+        kmeans = KMeans(n_clusters=n_clusters, init='k-means++', random_state=42)
+        y_kmeans = kmeans.fit_predict(df_grupat.values)
+        show_clusters(y_kmeans, df_grupat, coloana_aleasa)
+
+
+def plot_silhouette_scores(X, min_k=2, max_k=10):
+    scores = []
+
+    for k in range(min_k, max_k + 1):
+        km = KMeans(n_clusters=k, init='k-means++', random_state=42)
+        preds = km.fit_predict(X)
+        score = silhouette_score(X, preds)
+        scores.append(score)
+
+    # Afișăm graficul în Streamlit
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.lineplot(x=list(range(min_k, max_k + 1)), y=scores, marker='o', color='green', ax=ax)
+    ax.set_title("Silhouette Scores pentru diferite valori k")
+    ax.set_xlabel("Număr de clustere (k)")
+    ax.set_ylabel("Silhouette Score")
+    st.pyplot(fig)
+
+
+
+def show_clusters(y_kmeans, df_grupat, coloana_aleasa):
+    fig, ax = plt.subplots(figsize=(15, 7))
+    colors = ['yellow', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'cyan', 'lime']
+
+    for i in range(len(set(y_kmeans))):  # pentru fiecare cluster
+        cluster_points = df_grupat[y_kmeans == i]
+        sns.scatterplot(
+            x=cluster_points.iloc[:, 0],
+            y=cluster_points.iloc[:, 1],
+            color=colors[i % len(colors)],
+            label=f'Cluster {i + 1}',
+            s=50
+        )
+
+    ax.grid(False)
+    ax.set_title(f'Clusters of {coloana_aleasa}')
+    ax.set_xlabel('Miilioane')
+    ax.set_ylabel('Milioane')
+    ax.legend()
+
+    st.pyplot(fig)
+
+
+def correlation_matrix(df_grupat):
+    fig, ax = plt.subplots()
+    sns.heatmap(df_grupat.corr(), annot=True, ax=ax)
+    ax.set_title('Heatmap for Correlation Analysis')
+    st.pyplot(fig)
 
 
 def codificare(valori, df_ratinguri):
