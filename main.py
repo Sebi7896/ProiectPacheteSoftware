@@ -11,7 +11,7 @@ pagina_selectata = st.sidebar.radio("🔎 Alege o pagină:",
                                      "Date lipsa",
                                      "Scalarea datelor",
                                      "Valori aberante",
-                                     "Clusterizare"
-
+                                     "Clusterizare",
+                                     "Clasificare"
                                      ])
 Utils.script_sidebar(pagina_selectata)

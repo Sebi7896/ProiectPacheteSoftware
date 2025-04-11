@@ -3,9 +3,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import silhouette_score
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, f1_score
+from sklearn.metrics import roc_auc_score,roc_curve
 import seaborn as sns
 import geopandas as gpd
 
@@ -163,8 +168,121 @@ def script_sidebar(pagina_selectata):
         kmeans = KMeans(n_clusters=n_clusters, init='k-means++', random_state=42)
         y_kmeans = kmeans.fit_predict(df_grupat.values)
         show_clusters(y_kmeans, df_grupat, coloana_aleasa)
+    if pagina_selectata == "Clasificare":
+        prag_succes = st.slider("prag succes", 0.01, 10.0)
+        df = st.session_state['filtered_df'].copy()
 
+        df['succes'] = df['Global_Sales'].apply(lambda x: 1 if x > prag_succes else 0)
+        df.dropna(inplace=True)
 
+        # Selectarea coloanelor pentru grupare
+        coloane_de_grupare = [col for col in df.columns if not pd.api.types.is_numeric_dtype(df[col])]
+        coloane_de_grupare.append('Year')
+        if 'Name' in coloane_de_grupare:
+            coloane_de_grupare.remove('Name')
+
+        # Etichetarea valorilor categorice
+        le = LabelEncoder()
+        df['Genre'] = le.fit_transform(df['Genre'])
+        df['Publisher'] = le.fit_transform(df['Publisher'])
+        df['Platform'] = le.fit_transform(df['Platform'])
+
+        # Crearea setului de intrare X și a țintei y
+        X = df[['Publisher', 'Platform', 'Year', 'Genre']]
+        y = df['succes']
+
+        # Împărțirea setului de date în train și test
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Normalizarea datelor
+        scaler = MinMaxScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.transform(X_test)
+
+        # Crearea și antrenarea modelului de regresie logistică
+        model = LogisticRegression(max_iter=100, penalty='l2', solver='lbfgs')
+        model.fit(X_train, y_train)
+
+        # Predicția
+        y_pred = model.predict(X_test)
+
+        # Calcularea metricilor
+        mse = mean_squared_error(y_test, y_pred)
+        rmse = np.sqrt(mse)
+        accuracy = accuracy_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred, average='weighted')
+
+        # Afișarea RMSE, Acurateței și F1-Score
+        st.write(f'RMSE: {rmse}')
+        st.write(f'Acuratețe: {accuracy}')
+        st.write(f'F1-Score: {f1}')
+
+        # Graficul comparativ al succesului real vs prezis
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.bar([0, 1], [sum(y_test == 0), sum(y_test == 1)], width=0.4, label="Real", align='center', alpha=0.7,
+               color='blue')
+        ax.bar([0, 1], [sum(y_pred == 0), sum(y_pred == 1)], width=0.4, label="Predicted", align='edge', alpha=0.7,
+               color='orange')
+
+        # Adăugăm etichete și titluri
+        ax.set_xlabel('Class (0 = Not Success, 1 = Success)')
+        ax.set_ylabel('Count')
+        ax.set_title('Compararea succesului real vs prezis')
+        ax.legend()
+
+        st.pyplot(fig)
+
+        # Apelarea funcției pentru matricea de confuzie
+        mtrx = conf_mtrx(y_test, y_pred, 'Logistic Regression')
+        st.pyplot(mtrx)  # Afișează figura
+
+        # Apelarea funcției pentru curba ROC
+        area = roc_auc_curve_plot(model, X_test, y_test)
+        st.pyplot(area)
+
+def conf_mtrx(y_test, y_pred, model_name):
+    # Calculăm matricea de confuzie
+    cm = confusion_matrix(y_test, y_pred)
+
+    # Creăm figura și axele explicit
+    fig, ax = plt.subplots(figsize=(5, 5))  # Dimensiunea figurii poate fi ajustată
+
+    # Plănuim matricea de confuzie pe axele definite
+    sns.heatmap(cm, annot=True, linewidths=0.5, linecolor="red", fmt=".0f", ax=ax)
+
+    # Setăm titlurile și etichetele axelor
+    ax.set_xlabel("Predicted Values")
+    ax.set_ylabel("Real Values")
+    ax.set_title(f"Confusion Matrix for {model_name}")
+
+    # Returnăm figura pentru a o utiliza în st.pyplot()
+    return fig
+
+def roc_auc_curve_plot(model, X_test, y_test):
+    # Probabilitățile prezise de model pentru clasa pozitivă
+    model_probs = model.predict_proba(X_test)[:, 1]
+
+    # Calcularea scorului AUC
+    auc = roc_auc_score(y_test, model_probs)
+
+    # Calculăm TPR și FPR
+    fpr, tpr, _ = roc_curve(y_test, model_probs)
+
+    # Afișăm AUC în Streamlit
+    st.write(f"AUC: {auc:.3f}")
+
+    # Desenăm curba ROC
+    plt.figure(figsize=(10, 6))
+    plt.plot(fpr, tpr, marker='.', label='Model')
+    plt.plot([0, 1], [0, 1], linestyle='--', label='No Skill')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Curba ROC')
+    plt.legend()
+
+    return plt
+
+# Apelăm funcția pentru a afișa curba ROC
 def plot_silhouette_scores(X, min_k=2, max_k=10):
     scores = []
 
@@ -181,7 +299,6 @@ def plot_silhouette_scores(X, min_k=2, max_k=10):
     ax.set_xlabel("Număr de clustere (k)")
     ax.set_ylabel("Silhouette Score")
     st.pyplot(fig)
-
 
 
 def show_clusters(y_kmeans, df_grupat, coloana_aleasa):
@@ -387,3 +504,38 @@ def draw_map():
     # Display the map in Streamlit
     st.header("Numar utilizatori Steam pe tara")
     st.components.v1.html(open("map.html", "r").read(), height=600, scrolling=True)
+
+def conf_mtrx(y_test, y_pred, model_name):
+    cm = confusion_matrix(y_test, y_pred)
+
+    f, ax = plt.subplots(figsize=(5, 5))
+
+    sns.heatmap(cm, annot=True, linewidths=0.5, linecolor="red", fmt=".0f", ax=ax)
+
+    plt.xlabel("predicted y values")
+    plt.ylabel("real y values")
+    plt.title("\nConfusion Matrix " + model_name)
+
+    plt.show()
+
+def roc_auc_curve_plot(model_name, X_testt, y_testt):
+    ns_probs = [0 for _ in range(len(y_testt))]
+
+    model_probs = model_name.predict_proba(X_testt)[:, 1]
+
+    ns_auc = roc_auc_score(y_testt, ns_probs)
+    lr_auc = roc_auc_score(y_testt, model_probs)
+
+    print('No Skill: ROC AUC=%.3f' % (ns_auc))
+    print('Model: ROC AUC=%.3f' % (lr_auc))
+
+    ns_fpr, ns_tpr, _ = roc_curve(y_testt, ns_probs)
+    model_fpr, model_tpr, _ = roc_curve(y_testt, model_probs)
+
+    plt.plot(ns_fpr, ns_tpr, linestyle='--', label='No Skill')
+    plt.plot(model_fpr, model_tpr, marker='.', label='Classifier')
+
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.legend()
+    plt.show()
