@@ -5,8 +5,8 @@ import pandas as pd
 import seaborn as sns
 import streamlit as st
 from sklearn.cluster import KMeans
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
+from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, r2_score, mean_absolute_error
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.metrics import silhouette_score
@@ -247,6 +247,28 @@ def script_sidebar(pagina_selectata):
 
         # Apelarea funcției pentru curba ROC
         roc_auc_curve_representation(model, X_test, y_test)
+    if pagina_selectata == "Regresie":
+        coloane_de_vanzari = ['NA_Sales', 'JP_Sales', 'EU_Sales', 'Other_Sales', 'Global_Sales']
+        coloaneRegresie = [col for col in st.session_state['filtered_df'].columns if col not in coloane_de_vanzari]
+
+        coloaneSelectatePredictie = st.multiselect(label="Selectează coloanele pentru regresie",
+                                                   options=coloaneRegresie)
+        coloanaPrezisa = st.selectbox(label="Alege o coloana prezisa", options=coloane_de_vanzari)
+
+        if st.button("Prezice regresia"):
+            data = st.session_state['filtered_df'].copy().dropna()
+            X = data[coloaneSelectatePredictie]
+            X = pd.get_dummies(X, drop_first=True)
+            Y = data[coloanaPrezisa]
+            X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
+            model = LinearRegression()
+            model.fit(X_train, y_train)
+            y_pred_train = model.predict(X_train)
+            y_pred_test = model.predict(X_test)
+
+            st.write(f'RMSE (Train): {np.sqrt(mean_squared_error(y_train, y_pred_train))}')
+            st.write(f'MAE (Train): {mean_absolute_error(y_train, y_pred_train)}')
+            st.write(f'R² (Train): {r2_score(y_train, y_pred_train)}')
 
 
 def confusion_matrix_representation(y_test, y_pred, model_name):
@@ -331,7 +353,6 @@ def codificare(valori, df_ratinguri):
 
 
 def standardizare(coloane_numerice):
-
     df_temp = st.session_state['filtered_df'][coloane_numerice].copy()
     df_temp = df_temp.fillna(df_temp.mean())
     scaler = StandardScaler()
