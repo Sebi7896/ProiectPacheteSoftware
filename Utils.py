@@ -10,7 +10,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, f1_score
-from sklearn.metrics import roc_auc_score,roc_curve
+from sklearn.metrics import roc_auc_score, roc_curve
 import seaborn as sns
 import geopandas as gpd
 
@@ -233,54 +233,38 @@ def script_sidebar(pagina_selectata):
         st.pyplot(fig)
 
         # Apelarea funcției pentru matricea de confuzie
-        mtrx = conf_mtrx(y_test, y_pred, 'Logistic Regression')
-        st.pyplot(mtrx)  # Afișează figura
+        confusion_matrix_representation(y_test, y_pred, "Confusion matrix")
+        # Afișează figura
 
         # Apelarea funcției pentru curba ROC
-        area = roc_auc_curve_plot(model, X_test, y_test)
-        st.pyplot(area)
+        roc_auc_curve_representation(model, X_test, y_test)
 
-def conf_mtrx(y_test, y_pred, model_name):
-    # Calculăm matricea de confuzie
+
+def confusion_matrix_representation(y_test, y_pred, model_name):
     cm = confusion_matrix(y_test, y_pred)
-
-    # Creăm figura și axele explicit
-    fig, ax = plt.subplots(figsize=(5, 5))  # Dimensiunea figurii poate fi ajustată
-
-    # Plănuim matricea de confuzie pe axele definite
+    fig, ax = plt.subplots(figsize=(5, 5))
     sns.heatmap(cm, annot=True, linewidths=0.5, linecolor="red", fmt=".0f", ax=ax)
-
-    # Setăm titlurile și etichetele axelor
     ax.set_xlabel("Predicted Values")
     ax.set_ylabel("Real Values")
     ax.set_title(f"Confusion Matrix for {model_name}")
+    st.pyplot(fig)
 
-    # Returnăm figura pentru a o utiliza în st.pyplot()
-    return fig
 
-def roc_auc_curve_plot(model, X_test, y_test):
-    # Probabilitățile prezise de model pentru clasa pozitivă
+def roc_auc_curve_representation(model, X_test, y_test):
     model_probs = model.predict_proba(X_test)[:, 1]
-
-    # Calcularea scorului AUC
     auc = roc_auc_score(y_test, model_probs)
-
-    # Calculăm TPR și FPR
     fpr, tpr, _ = roc_curve(y_test, model_probs)
-
-    # Afișăm AUC în Streamlit
     st.write(f"AUC: {auc:.3f}")
+    # Correct plotting with the created figure and axis
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.plot(fpr, tpr, marker='.', label='Model')
+    ax.plot([0, 1], [0, 1], linestyle='--', label='No Skill')
+    ax.set_xlabel('False Positive Rate')
+    ax.set_ylabel('True Positive Rate')
+    ax.set_title('ROC Curve')
+    ax.legend()
+    st.pyplot(fig)
 
-    # Desenăm curba ROC
-    plt.figure(figsize=(10, 6))
-    plt.plot(fpr, tpr, marker='.', label='Model')
-    plt.plot([0, 1], [0, 1], linestyle='--', label='No Skill')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Curba ROC')
-    plt.legend()
-
-    return plt
 
 # Apelăm funcția pentru a afișa curba ROC
 def plot_silhouette_scores(X, min_k=2, max_k=10):
@@ -505,6 +489,7 @@ def draw_map():
     st.header("Numar utilizatori Steam pe tara")
     st.components.v1.html(open("map.html", "r").read(), height=600, scrolling=True)
 
+
 def conf_mtrx(y_test, y_pred, model_name):
     cm = confusion_matrix(y_test, y_pred)
 
@@ -517,6 +502,7 @@ def conf_mtrx(y_test, y_pred, model_name):
     plt.title("\nConfusion Matrix " + model_name)
 
     plt.show()
+
 
 def roc_auc_curve_plot(model_name, X_testt, y_testt):
     ns_probs = [0 for _ in range(len(y_testt))]
