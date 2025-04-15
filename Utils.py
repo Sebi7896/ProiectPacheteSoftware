@@ -1,22 +1,25 @@
-import streamlit as st
+import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+import seaborn as sns
+import streamlit as st
 from sklearn.cluster import KMeans
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import silhouette_score
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, f1_score
 from sklearn.metrics import roc_auc_score, roc_curve
-import seaborn as sns
-import geopandas as gpd
+from sklearn.metrics import silhouette_score
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-df = pd.read_csv('vgsales.csv', index_col=0)
+df = pd.read_csv('Video_Games_Sales_as_at_22_Dec_2016.csv', index_col=0)
+df['User_Score'] = pd.to_numeric(df['User_Score'], errors='coerce')
+
 if 'filtered_df' not in st.session_state:
     st.session_state['filtered_df'] = df.copy(False)
+
 if 'ratings' not in st.session_state:
     st.session_state['ratings'] = pd.read_csv('GameReviews.csv', index_col=0)
 filter_dict = {x: "" for x in df.columns}
@@ -75,6 +78,13 @@ def script_sidebar(pagina_selectata):
             st.button("Metoda modului", on_click=onClick, args=("modului", coloana_selectata))
             st.button("Metoda medianei", on_click=onClick, args=("medianei", coloana_selectata))
 
+        if numar_valori_lipsa > 0 and not pd.api.types.is_numeric_dtype(
+                st.session_state['filtered_df'][coloana_selectata]):
+            st.subheader("Sterge valorile lipsa")
+            if st.button("Șterge"):
+                st.session_state['filtered_df'] = st.session_state['filtered_df'].dropna(subset=[coloana_selectata])
+                st.success(f"Valorile lipsă din coloana '{coloana_selectata}' au fost șterse cu succes!")
+
     if pagina_selectata == "Functii de grup":
         selected_column = st.selectbox("Coloana pentru grupare", st.session_state['filtered_df'].columns)
         numerice = []
@@ -115,7 +125,6 @@ def script_sidebar(pagina_selectata):
         alegere = st.selectbox("Selecteaza metoda de scalare", ['Standardizare', 'Normalizare'])
         coloane_numerice = [col for col in st.session_state['filtered_df'].columns
                             if pd.api.types.is_numeric_dtype(st.session_state['filtered_df'][col]) and col != 'Year']
-
         if st.button("Aplica"):
             standardizare(coloane_numerice) if alegere == 'Standardizare' else normalizare(coloane_numerice)
 
@@ -163,11 +172,11 @@ def script_sidebar(pagina_selectata):
 
         #silhoutte
         plot_silhouette_scores(df_grupat.values, 2, 11)
-
         n_clusters = st.slider("Selecteaza numarul de clusteri", min_value=2, max_value=10, value=3)
         kmeans = KMeans(n_clusters=n_clusters, init='k-means++', random_state=42)
         y_kmeans = kmeans.fit_predict(df_grupat.values)
         show_clusters(y_kmeans, df_grupat, coloana_aleasa)
+
     if pagina_selectata == "Clasificare":
         prag_succes = st.slider("prag succes", 0.01, 10.0)
         df = st.session_state['filtered_df'].copy()
@@ -322,16 +331,21 @@ def codificare(valori, df_ratinguri):
 
 
 def standardizare(coloane_numerice):
+
+    df_temp = st.session_state['filtered_df'][coloane_numerice].copy()
+    df_temp = df_temp.fillna(df_temp.mean())
     scaler = StandardScaler()
-    st.session_state['filtered_df'][coloane_numerice] = pd.DataFrame(
-        scaler.fit_transform(st.session_state['filtered_df'][coloane_numerice]))
+    scaled_data = scaler.fit_transform(df_temp)
+    st.session_state['filtered_df'][coloane_numerice] = scaled_data
     st.text('Standardizare cu succes!')
 
 
 def normalizare(coloane_numerice):
+    df_temp = st.session_state['filtered_df'][coloane_numerice].copy()
+    df_temp = df_temp.fillna(df_temp.mean())
     min_max_scaler = MinMaxScaler()
-    st.session_state['filtered_df'][coloane_numerice] = pd.DataFrame(
-        min_max_scaler.fit_transform(st.session_state['filtered_df'][coloane_numerice]))
+    scaled_data = min_max_scaler.fit_transform(df_temp)
+    st.session_state['filtered_df'][coloane_numerice] = scaled_data
     st.text('Normalizare cu succes!')
 
 
@@ -358,7 +372,7 @@ def filter_dataframe():
                     filtered_copy = filtered_copy[filtered_copy[column] < float(value)]
                 else:
                     filtered_copy = filtered_copy[filtered_copy[column] == float(value)]
-            elif pd.api.types.is_string_dtype(filtered_copy[column]):
+            else:
                 filtered_copy = filtered_copy[
                     filtered_copy[column].astype(str).str.contains(value, case=False, na=False)]
 
@@ -395,7 +409,7 @@ def onClick(nume, coloana_selectatat):
 
 
 def pieChartUI():
-    chart_columns = ['Platform', 'Year', 'Genre', 'Publisher']
+    chart_columns = ['Platform', 'Year', 'Genre', 'Publisher', 'Developer', 'Rating']
     result_columns = ['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']
     column1 = st.selectbox('Coloana 1', chart_columns)
     column2 = st.selectbox('Coloana 2', result_columns)
@@ -417,7 +431,7 @@ def pieChartUI():
 
 def histogram():
     selected_column = st.selectbox("Alege o coloana dupa care sa ai distributia",
-                                   ['Platform', 'Year', 'Genre', 'Publisher'])
+                                   ['Platform', 'Year', 'Genre', 'Publisher', 'Developer', 'Rating'])
 
     if pd.api.types.is_numeric_dtype(df[selected_column]):
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -488,40 +502,3 @@ def draw_map():
     # Display the map in Streamlit
     st.header("Numar utilizatori Steam pe tara")
     st.components.v1.html(open("map.html", "r").read(), height=600, scrolling=True)
-
-
-def conf_mtrx(y_test, y_pred, model_name):
-    cm = confusion_matrix(y_test, y_pred)
-
-    f, ax = plt.subplots(figsize=(5, 5))
-
-    sns.heatmap(cm, annot=True, linewidths=0.5, linecolor="red", fmt=".0f", ax=ax)
-
-    plt.xlabel("predicted y values")
-    plt.ylabel("real y values")
-    plt.title("\nConfusion Matrix " + model_name)
-
-    plt.show()
-
-
-def roc_auc_curve_plot(model_name, X_testt, y_testt):
-    ns_probs = [0 for _ in range(len(y_testt))]
-
-    model_probs = model_name.predict_proba(X_testt)[:, 1]
-
-    ns_auc = roc_auc_score(y_testt, ns_probs)
-    lr_auc = roc_auc_score(y_testt, model_probs)
-
-    print('No Skill: ROC AUC=%.3f' % (ns_auc))
-    print('Model: ROC AUC=%.3f' % (lr_auc))
-
-    ns_fpr, ns_tpr, _ = roc_curve(y_testt, ns_probs)
-    model_fpr, model_tpr, _ = roc_curve(y_testt, model_probs)
-
-    plt.plot(ns_fpr, ns_tpr, linestyle='--', label='No Skill')
-    plt.plot(model_fpr, model_tpr, marker='.', label='Classifier')
-
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.legend()
-    plt.show()
