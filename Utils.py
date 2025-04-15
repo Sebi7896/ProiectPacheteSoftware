@@ -270,6 +270,24 @@ def script_sidebar(pagina_selectata):
             st.write(f'MAE (Train): {mean_absolute_error(y_train, y_pred_train)}')
             st.write(f'R² (Train): {r2_score(y_train, y_pred_train)}')
 
+            fig, ax = plt.subplots()
+            ax.scatter(y_test, y_pred_test, alpha=0.6, color='blue', label='Predicții')
+            ax.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', label='Ideal')
+            ax.set_xlabel('Valori Reale')
+            ax.set_ylabel('Valori Prezise')
+            ax.set_title('Comparație: Valori Reale vs. Prezise (Test Set)')
+            ax.legend()
+            st.pyplot(fig)
+
+            errors = y_test - y_pred_test
+            fig, ax = plt.subplots()
+            sns.histplot(errors, kde=True, ax=ax, color='purple')
+            ax.set_title('Distribuția Erorilor (Test Set)')
+            ax.set_xlabel('Eroare')
+            st.pyplot(fig)
+
+
+
 
 def confusion_matrix_representation(y_test, y_pred, model_name):
     cm = confusion_matrix(y_test, y_pred)
